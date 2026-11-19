@@ -1,0 +1,163 @@
+name: insightrag
+
+x-backend: &backend
+  image: insightrag-api:local
+  build:
+    context: .
+    dockerfile: infra/docker/backend.Dockerfile
+  environment: &backend-environment
+    INSIGHTRAG_ENVIRONMENT: development
+    INSIGHTRAG_DATABASE_URL_FILE: /run/secrets/database_url
+    INSIGHTRAG_REDIS_URL_FILE: /run/secrets/redis_url
+    INSIGHTRAG_SIGNED_JOB_KEY_FILE: /run/secrets/signed_job_key
+    INSIGHTRAG_OIDC_ISSUER: ${INSIGHTRAG_OIDC_ISSUER:-}
+    INSIGHTRAG_OIDC_AUDIENCE: ${INSIGHTRAG_OIDC_AUDIENCE:-}
+    INSIGHTRAG_OIDC_JWKS_URL: ${INSIGHTRAG_OIDC_JWKS_URL:-}
+  secrets:
+    - database_url
+    - redis_url
+    - signed_job_key
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: insightrag_migrator
+      POSTGRES_DB: insightrag
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets:
+      - postgres_password
+      - runtime_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-runtime.sh:/docker-entrypoint-initdb.d/10-runtime.sh:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insightrag_migrator -d insightrag"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
+    entrypoint: ["/bin/sh", "/usr/local/bin/insightrag-redis-start.sh"]
+    secrets:
+      - redis_password
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/start.sh:/usr/local/bin/insightrag-redis-start.sh:ro
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "-c", "apps/api/alembic.ini", "upgrade", "head"]
+    environment:
+      <<: *backend-environment
+      INSIGHTRAG_MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
+    secrets:
+      - database_url
+      - migration_database_url
+      - redis_url
+      - signed_job_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "insightrag.worker:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "celery", "-A", "insightrag.worker:celery_app", "inspect", "ping", "--timeout=5"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      API_INTERNAL_BASE_URL: "http://api:8000"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000', {signal: AbortSignal.timeout(4000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+secrets:
+  postgres_password:
+    file: ./.secrets/postgres_password
+  runtime_db_password:
+    file: ./.secrets/runtime_db_password
+  redis_password:
+    file: ./.secrets/redis_password
+  database_url:
+    file: ./.secrets/database_url
+  migration_database_url:
+    file: ./.secrets/migration_database_url
+  redis_url:
+    file: ./.secrets/redis_url
+  signed_job_key:
+    file: ./.secrets/signed_job_key
+
+volumes:
+  postgres_data:
+  redis_data:

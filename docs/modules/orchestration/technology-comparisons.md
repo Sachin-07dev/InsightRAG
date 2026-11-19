@@ -1,0 +1,12 @@
+# Phase 7 technology choices
+
+| Choice | Selected behavior | Alternatives and evidence needed to change |
+|---|---|---|
+| LangGraph vs plain Python | Explicit typed graph, conditional edges and finite termination in [graph.py](../../../apps/api/src/insightrag/orchestration/graph.py). Additional dependency and state machinery cost complexity. | A plain async function would be simpler at this size and may have less overhead; benchmark the graph and team maintenance before claiming LangGraph is faster. LangChain chains are convenient for linear prompt composition but do not clarify this branch structure as directly. Other agent frameworks add autonomous planning that is unnecessary here. |
+| Deterministic vs LLM router | Rules from user-selected sources and validated subquestions. No model routing cost or permission authority. | Structured LLM decisions could improve ambiguous classification, but need labeled routing evaluations, schema validation, injection tests and safe fallback. They still cannot grant access. |
+| Single graph vs multi-agent | One controller invokes specialized trusted services. | Separate agents can parallelize research but add coordination, state leakage and unbounded costs. Introduce only after a measured task class benefits and policy isolation is proven. |
+| Sequential vs parallel hybrid | Analytics runs before RAG; one SQL result can survive document-provider unavailability. | Parallel execution could reduce latency but increases provider and DB concurrency and requires reducers and policy-snapshot handling. Benchmark p95 and isolate failures first. |
+| Ephemeral state vs checkpoint | No persisted private graph state; Phase 5 owns conversation persistence. | Durable PostgreSQL checkpointing would support resume, but needs tenant-scoped encryption, TTL, deletion propagation, identity binding and permission revalidation. `InMemorySaver` is unsuitable for multi-process recovery or private production state. |
+| REST vs SSE/WebSocket | One request/response with existing OIDC security. | SSE may help token streaming and cancellation; WebSocket is only justified by bidirectional interaction. Both need disconnect and revocation handling. Neither improves deterministic SQL correctness. |
+
+See [LangGraph fundamentals](../../concepts/langgraph-fundamentals.md), [security](../../security/orchestration-security.md), and [the Phase 6 NO-GO review](../analytics/PHASE_06_REVIEW_REPORT.md). These are design trade-offs, not benchmark results.

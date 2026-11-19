@@ -1,0 +1,44 @@
+[project]
+name = "insightrag-workspace"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+[dependency-groups]
+dev = [
+  "asgi-lifespan>=2.1,<3", "httpx>=0.28,<1", "mypy>=1.15,<2",
+  "pip-audit>=2.9,<3", "pytest>=8.3,<10", "pytest-asyncio>=1,<2",
+  "pytest-cov>=6,<8", "pyyaml>=6,<7", "ruff>=0.12,<1", "types-PyYAML>=6,<7"
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["work", ".venv", "node_modules", ".next"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["apps/api/src"]
+exclude = ["work", ".venv"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra -m 'not integration'"
+markers = ["integration: requires real migrated PostgreSQL and Redis; run explicitly"]
+
+[tool.coverage.run]
+source = ["insightrag"]
+omit = ["*/worker.py"]

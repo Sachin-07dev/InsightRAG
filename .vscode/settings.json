@@ -1,0 +1,19 @@
+{
+  "explorer.compactFolders": true,
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/.next": true,
+    "**/__pycache__": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.coverage": true,
+    "**/coverage": true,
+    "**/htmlcov": true,
+    "**/next-env.d.ts": true,
+    "**/*.tsbuildinfo": true,
+    ".secrets": true,
+    "work": true
+  }
+}

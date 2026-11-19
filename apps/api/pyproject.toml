@@ -1,0 +1,35 @@
+[project]
+name = "insightrag-api"
+version = "0.1.0"
+description = "InsightRAG Enterprise API and worker foundation"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic>=1.14,<2",
+  "asyncpg>=0.30,<1",
+  "celery[redis]>=5.5,<6",
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "redis>=6,<8",
+  "sqlalchemy[asyncio]>=2.0.36,<2.1",
+  "structlog>=25,<27",
+  "uvicorn>=0.34,<1",
+  "httpx>=0.28,<1",
+  "PyJWT[crypto]>=2.10,<3",
+  "cryptography>=44,<49",
+  "pymupdf>=1.25,<2",
+  "python-docx>=1.1,<2",
+  "openpyxl>=3.1,<4",
+  "tiktoken>=0.9,<1",
+  "boto3>=1.35,<2",
+  "duckdb>=1.4,<2",
+  "langgraph>=1.0,<2",
+  "opentelemetry-api>=1.30,<2",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insightrag"]

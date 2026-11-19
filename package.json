@@ -1,0 +1,23 @@
+{
+  "name": "insightrag-enterprise",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/web"],
+  "engines": {"node": ">=24.0.0 <25"},
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    }
+  },
+  "scripts": {
+    "dev:web": "npm run dev --workspace @insightrag/web",
+    "build:web": "npm run build --workspace @insightrag/web",
+    "start:web": "npm run start --workspace @insightrag/web",
+    "lint:web": "npm run lint --workspace @insightrag/web",
+    "typecheck:web": "npm run typecheck --workspace @insightrag/web",
+    "test:web": "npm run test --workspace @insightrag/web",
+    "format:web": "npm run format --workspace @insightrag/web",
+    "format:check:web": "npm run format:check --workspace @insightrag/web",
+    "check:docs": "node scripts/validate-phase1.mjs && node --test scripts/validate-phase1.test.mjs"
+  }
+}

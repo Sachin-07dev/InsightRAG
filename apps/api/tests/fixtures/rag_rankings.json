@@ -1,0 +1,9 @@
+{
+  "version": "phase5-synthetic-rankings-v1",
+  "cases": [
+    {"question": "invoice INV-42", "kind": "exact", "relevant": ["invoice"], "dense": ["policy", "invoice", "report"], "sparse": ["invoice", "report", "policy"]},
+    {"question": "expense authorization", "kind": "semantic", "relevant": ["policy"], "dense": ["policy", "report", "invoice"], "sparse": ["report", "invoice", "policy"]},
+    {"question": "quarterly overview", "kind": "multi-document", "relevant": ["report", "policy"], "dense": ["report", "invoice", "policy"], "sparse": ["policy", "report", "invoice"]},
+    {"question": "unknown project", "kind": "unanswerable", "relevant": [], "dense": [], "sparse": []}
+  ]
+}

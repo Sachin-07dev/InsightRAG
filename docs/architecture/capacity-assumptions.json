@@ -1,0 +1,16 @@
+{
+  "status": "planning-assumptions-not-benchmarks",
+  "organizations": [10, 100, 1000, 10000],
+  "documents_per_organization": 1000,
+  "chunks_per_document": 20,
+  "document_gb_per_organization": 1,
+  "structured_gb_per_organization": 1,
+  "queries_per_organization_per_day": 100,
+  "peak_multiplier": 10,
+  "occupancy_seconds": 20,
+  "embedding_dimensions": 1536,
+  "bytes_per_dimension": 4,
+  "tokens_per_chunk": 500,
+  "seconds_per_day": 86400,
+  "decimal_bytes_per_gb": 1000000000
+}

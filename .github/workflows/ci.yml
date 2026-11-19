@@ -1,0 +1,126 @@
+name: Security and foundation checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: node scripts/validate-phase1.mjs
+      - run: node --test scripts/*.test.mjs
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --locked --all-packages --group dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run --package insightrag-api pytest
+      - run: uv run --package insightrag-api python scripts/smoke-api.py
+      - name: Verify the checked-in development OpenAPI contract
+        run: |
+          uv run --package insightrag-api python scripts/export-openapi.py
+          git diff --exit-code -- docs/api/openapi.json
+      - name: Start real integration dependencies
+        run: |
+          node scripts/bootstrap-local.mjs
+          docker compose config --quiet
+          docker compose up -d --wait postgres redis
+      - name: Apply migrations with owner credentials
+        env:
+          INSIGHTRAG_DATABASE_URL_FILE: .secrets/host_database_url
+          INSIGHTRAG_MIGRATION_DATABASE_URL_FILE: .secrets/host_migration_database_url
+          INSIGHTRAG_REDIS_URL_FILE: .secrets/host_redis_url
+        run: uv run --package insightrag-api alembic -c apps/api/alembic.ini upgrade head
+      - name: Integration and runtime privilege tests
+        env:
+          INSIGHTRAG_TEST_DATABASE_URL_FILE: .secrets/host_database_url
+          INSIGHTRAG_TEST_REDIS_URL_FILE: .secrets/host_redis_url
+          INSIGHTRAG_TEST_MIGRATION_DATABASE_URL_FILE: .secrets/host_migration_database_url
+        run: uv run --package insightrag-api pytest -m integration
+      - name: Python dependency vulnerability scan
+        run: |
+          mkdir -p work
+          uv export --locked --all-packages --no-dev --no-emit-workspace --format requirements-txt --output-file work/requirements-audit.txt
+          uv run pip-audit --strict --requirement work/requirements-audit.txt --no-deps --disable-pip
+      - name: Clean up integration services
+        if: always()
+        run: docker compose down
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:web
+      - run: npm run format:check:web
+      - run: npm run typecheck:web
+      - run: npm run test:web
+      - run: npm run build:web
+      - run: npm audit --audit-level=high
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [documentation, backend, frontend]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: node scripts/bootstrap-local.mjs
+      - run: docker compose config --quiet
+      - run: docker compose build
+      - run: docker compose up -d --wait --wait-timeout 180
+      - name: Smoke-test service boundaries
+        run: |
+          curl --fail --silent http://127.0.0.1:8000/health/live
+          curl --fail --silent http://127.0.0.1:8000/health/ready
+          curl --fail --silent http://127.0.0.1:8000/api/v1/meta
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/api/v1/me)" = 401
+          curl --fail --silent http://127.0.0.1:8000/api/v1/openapi.json > /dev/null
+          curl --fail --silent http://127.0.0.1:3000 > /dev/null
+          docker compose exec -T worker celery -A insightrag.worker:celery_app inspect ping --timeout=5
+          docker compose exec -T api python -c "from insightrag.worker import celery_app; result = celery_app.send_task('insightrag.diagnostics.ping'); assert result.get(timeout=20) == {'status': 'ok'}"
+      - name: Diagnostics after failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100 api worker migrate web
+      - name: Stop services
+        if: always()
+        run: docker compose down

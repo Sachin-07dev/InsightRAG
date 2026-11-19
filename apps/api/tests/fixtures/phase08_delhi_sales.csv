@@ -1,0 +1,7 @@
+transaction_id,transaction_date,region,product,revenue,cost,units,returns,currency
+synthetic-a,2025-01-15,Delhi,Widget,100.1000,40.0000,2,0,INR
+synthetic-b,2025-01-20,Mumbai,Gadget,80.0000,35.0000,1,0,INR
+synthetic-c,2025-02-10,Delhi,Widget,120.0000,50.0000,2,0,INR
+synthetic-d,2025-02-12,Delhi,Gadget,-20.0000,-8.0000,0,1,INR
+synthetic-e,2025-02-14,Mumbai,Gadget,100.0000,45.0000,2,0,INR
+synthetic-f,2025-03-05,Delhi,Gadget,50.0000,20.0000,1,0,INR
